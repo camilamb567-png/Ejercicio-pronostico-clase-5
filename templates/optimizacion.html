@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pronósticos</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+
+<div class="contenedor">
+    <h1>Aplicación de Pronósticos</h1>
+
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="archivo" required>
+        <input type="number" name="n" placeholder="Valor de N" required>
+        <button type="submit">Calcular</button>
+    </form>
+
+    {% if not resultados %}
+        <p style="text-align:center; margin-top:20px;">
+            Carga un archivo y calcula el pronóstico
+        </p>
+    {% endif %}
+
+    {% if resultados %}
+        <h2>Resultados</h2>
+
+        {% for producto, datos in resultados.items() %}
+            <div class="resultado">
+                <h3>{{ producto }}</h3>
+
+                
+                <p><strong>MAPE:</strong> {{ datos.mape }} %</p>
+                <p><strong>MAPE':</strong> {{ datos.mape_prima }} %</p>
+                <p><strong>MSE:</strong> {{ datos.mse }}</p>
+                <p><strong>RMSE:</strong> {{ datos.rmse }}</p>
+
+                <p><strong>Pronóstico:</strong></p>
+
+                <table>
+                    <tr>
+                        <th>Periodo</th>
+                        <th>Pronóstico</th>
+                    </tr>
+                    {% for valor in datos.pronostico %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>
+                            {% if valor != None %}
+                                {{ valor }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+
+                <hr>
+            </div>
+        {% endfor %}
+    {% endif %}
+</div>
+
+</body>
+</html>
