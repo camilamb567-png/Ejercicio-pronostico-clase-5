@@ -1,65 +1,153 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <title>Pronósticos</title>
+    <meta charset="UTF-8">
+    <title>Pronósticos | Herramienta de Series de Tiempo</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
 
 <div class="contenedor">
-    <h1>Aplicación de Pronósticos</h1>
 
-    <form method="POST" enctype="multipart/form-data">
-        <input type="file" name="archivo" required>
-        <input type="number" name="n" placeholder="Valor de N" required>
-        <button type="submit">Calcular</button>
-    </form>
+    <header class="encabezado">
+        <h1>📈 Herramienta de Pronósticos</h1>
+        <p class="subtitulo">Promedio Móvil · Suavización Exponencial · Prophet</p>
+    </header>
 
-    {% if not resultados %}
-        <p style="text-align:center; margin-top:20px;">
-            Carga un archivo y calcula el pronóstico
-        </p>
+    <!-- ── FORMULARIO ── -->
+    <section class="card formulario">
+        <h2>Configuración</h2>
+        <form method="POST" enctype="multipart/form-data" class="grid-form">
+
+            <div class="campo">
+                <label for="archivo">📂 Archivo CSV <span class="hint">(separado por ;)</span></label>
+                <input type="file" id="archivo" name="archivo" accept=".csv" required>
+            </div>
+
+            <div class="campo">
+                <label for="fecha_fin">📅 Fecha final de proyección</label>
+                <input type="month" id="fecha_fin" name="fecha_fin" placeholder="YYYY-MM">
+                <small class="hint">Deja vacío para proyectar 6 períodos por defecto</small>
+            </div>
+
+            <div class="campo">
+                <label for="n">🔢 N – Ventana Promedio Móvil</label>
+                <input type="number" id="n" name="n" min="2" max="24" value="3" required>
+            </div>
+
+            <div class="campo campo-full">
+                <label>🧠 Modelos a aplicar</label>
+                <div class="checkgroup">
+                    <label class="check-item">
+                        <input type="checkbox" name="metodos" value="promedio_movil"
+                               {% if not metodos_sel or 'promedio_movil' in metodos_sel %}checked{% endif %}>
+                        <span>Promedio Móvil</span>
+                    </label>
+                    <label class="check-item">
+                        <input type="checkbox" name="metodos" value="ses"
+                               {% if 'ses' in metodos_sel %}checked{% endif %}>
+                        <span>Suavización Exponencial Simple</span>
+                    </label>
+                    <label class="check-item {% if not prophet_disponible %}disabled{% endif %}">
+                        <input type="checkbox" name="metodos" value="prophet"
+                               {% if 'prophet' in metodos_sel %}checked{% endif %}
+                               {% if not prophet_disponible %}disabled{% endif %}>
+                        <span>Prophet (Meta)
+                            {% if not prophet_disponible %}
+                                <em class="badge-warn">no instalado</em>
+                            {% endif %}
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="campo campo-full">
+                <button type="submit" class="btn-calcular">▶ Calcular Pronósticos</button>
+            </div>
+        </form>
+    </section>
+
+    {% if error_msg %}
+    <div class="alerta-error">
+        ⚠️ <strong>Error:</strong> {{ error_msg }}
+    </div>
     {% endif %}
 
     {% if resultados %}
+    <section class="resultados-section">
         <h2>Resultados</h2>
 
         {% for producto, datos in resultados.items() %}
-            <div class="resultado">
-                <h3>{{ producto }}</h3>
+        <div class="card resultado-producto">
+            <h3 class="prod-titulo">{{ producto }}</h3>
 
-                
-                <p><strong>MAPE:</strong> {{ datos.mape }} %</p>
-                <p><strong>MAPE':</strong> {{ datos.mape_prima }} %</p>
-                <p><strong>MSE:</strong> {{ datos.mse }}</p>
-                <p><strong>RMSE:</strong> {{ datos.rmse }}</p>
+            {% if datos.get('error_col') %}
+            <div class="alerta-error">Error en este producto: {{ datos.error_col }}</div>
+            {% endif %}
 
-                <p><strong>Pronóstico:</strong></p>
+            <div class="grafica-wrap">
+                <img src="data:image/png;base64,{{ datos.grafica }}" alt="Gráfica {{ producto }}">
+            </div>
 
-                <table>
+            <h4>📊 Comparativa de Métodos</h4>
+            <table class="tabla-resumen">
+                <thead>
                     <tr>
-                        <th>Periodo</th>
-                        <th>Pronóstico</th>
+                        <th>Método</th><th>MAPE</th><th>MSE</th><th>RMSE</th><th>Evaluación</th>
                     </tr>
-                    {% for valor in datos.pronostico %}
-                    <tr>
-                        <td>{{ loop.index }}</td>
-                        <td>
-                            {% if valor != None %}
-                                {{ valor }}
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
+                </thead>
+                <tbody>
+                    {% for fila in datos.resumen %}
+                    <tr class="{% if fila.get('mejor') %}fila-mejor{% endif %}">
+                        <td>{{ fila.metodo }}</td>
+                        <td>{{ fila.mape }}</td>
+                        <td>{{ fila.mse }}</td>
+                        <td>{{ fila.rmse }}</td>
+                        <td>{% if fila.get('mejor') %}<span class="badge-mejor">✅ Mejor ajuste</span>{% else %}—{% endif %}</td>
                     </tr>
                     {% endfor %}
+                </tbody>
+            </table>
+
+            {% for metodo, mdat in datos.metodos.items() %}
+            <details class="detalle-metodo">
+                <summary>
+                    <span class="dot dot-{{ metodo }}"></span>
+                    {{ mdat.label }} – Proyecciones
+                    {% if mdat.extra.get('alpha') %}<small>(α = {{ mdat.extra.alpha }})</small>{% endif %}
+                    {% if mdat.extra.get('error') %}<small class="badge-warn">{{ mdat.extra.error }}</small>{% endif %}
+                </summary>
+
+                {% if mdat.tabla_futuros %}
+                <table class="tabla-pronostico">
+                    <thead><tr><th>Periodo</th><th>Pronóstico</th></tr></thead>
+                    <tbody>
+                        {% for row in mdat.tabla_futuros %}
+                        <tr><td>{{ row.periodo }}</td><td>{{ row.valor }}</td></tr>
+                        {% endfor %}
+                    </tbody>
                 </table>
+                {% else %}
+                <p class="sin-datos">Sin datos de proyección disponibles.</p>
+                {% endif %}
 
-                <hr>
-            </div>
+                <div class="errores-inline">
+                    <span><strong>MAPE:</strong> {{ mdat.errores.mape }} %</span>
+                    <span><strong>MSE:</strong> {{ mdat.errores.mse }}</span>
+                    <span><strong>RMSE:</strong> {{ mdat.errores.rmse }}</span>
+                </div>
+            </details>
+            {% endfor %}
+
+        </div>
         {% endfor %}
+    </section>
     {% endif %}
-</div>
 
+    {% if not resultados and not error_msg %}
+    <p class="placeholder">Carga un archivo CSV y configura los parámetros para comenzar.</p>
+    {% endif %}
+
+</div>
 </body>
 </html>
